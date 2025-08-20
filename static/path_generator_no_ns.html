@@ -40,9 +40,6 @@
     </style>
 </head>
 <body>
-    <div style="position: fixed; top: 100px; left: 10px; z-index: 1000; background: white; padding: 8px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-        <input id="robotNameInput" type="text" placeholder="输入机器人名称" style="padding: 8px; border-radius: 4px; border: 1px solid #ccc; width: 100px;">
-    </div>
     <div style="position: absolute; top: 60px; left: 10px; background: white; padding: 5px; border-radius: 5px;">
         <label for="gridScale">grid scale factor: </label>
         <input type="range" id="gridScale" min="0.001" max="1" step="0.001" value="0.01">
@@ -61,7 +58,6 @@
         const clearButton = document.getElementById('clearButton');
         const gridScale = document.getElementById('gridScale');
         const scaleValue = document.getElementById('scaleValue');
-        const robotNameInput = document.getElementById('robotNameInput');
 
         // Update scale value display when slider changes
         gridScale.addEventListener('input', () => {
@@ -131,12 +127,10 @@
         // Initial grid draw
         drawGrid();
 
-        // initialize ros connections and threads
-        const ros = new ROSLIB.Ros({ url: 'ws://localhost:9090' });
-        let pathTopic = new ROSLIB.Topic({
-            ros: ros,
-            name: `/path`,
-            messageType: 'nav_msgs/Path'
+        // Connect to ROSbridge
+        // Connect to ROSbridge server
+        const ros = new ROSLIB.Ros({
+            url: 'ws://localhost:9090' // ROSbridge WebSocket URL
         });
 
         ros.on('connection', () => {
@@ -151,27 +145,12 @@
             console.log('Connection to ROSbridge closed');
         });
 
-        // Get ROBOT_NAME from environment or default to 'robot'
-        let robotName = window.ROBOT_NAME || '';
-        console.log(`Using robot name: ${robotName}`);
-
-        // update topics name dynamically
-        robotNameInput.addEventListener('input', (e) => {
-            const newRobotName = e.target.value;
-            if (newRobotName !== robotName) {
-                robotName = newRobotName;
-                console.log(`Updated robot name: ${robotName}`);
-
-                // recreate a topic instance
-                pathTopic = new ROSLIB.Topic({
-                    ros: ros,
-                    name: `/${robotName}/path`,
-                    messageType: 'nav_msgs/Path'
-                });
-            }
+        // Create a Path topic
+        const pathTopic = new ROSLIB.Topic({
+            ros: ros,
+            name: '/path',
+            messageType: 'nav_msgs/Path'
         });
-
-        console.log(`Prepare for publishing path to topic: ${pathTopic.name}`);
 
         // Mouse event handlers
         canvas.addEventListener('mousedown', startDrawing);
@@ -207,6 +186,7 @@
             isDrawing = false;
         }
 
+        // Publish path to ROS
         // Publish the drawn path to ROS
         function publishPath() {
             // Get the current scale value from the slider
@@ -217,7 +197,7 @@
 
             const header = new ROSLIB.Message({
                 stamp: { secs: 0, nsecs: 0 },
-                frame_id: `${robotName}/map`
+                frame_id: 'map'
             });
 
             const centerX = canvas.width / 2;
@@ -253,7 +233,7 @@
                     publishInterval = setInterval(publishPath, 1000); // Publish every second
                     isPublishing = true;
                     publishButton.textContent = 'Stop Publishing';
-                    alert(`Started publishing path to ${robotName}/path`);
+                    alert('Started publishing path to /path');
                 } else {
                     alert('No path to publish!');
                 }
