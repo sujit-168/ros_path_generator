@@ -48,14 +48,21 @@
     </div>
     <div style="position: absolute; top: 60px; left: 10px; background: white; padding: 5px; border-radius: 5px;">
         <label for="gridScale">grid scale factor: </label>
-        <input type="range" id="gridScale" min="0.001" max="1" step="0.001" value="0.01">
-        <span id="scaleValue">0.01</span>
+        <input type="range" id="gridScale" min="0.1" max="1" step="0.1" value="1">
+        <span id="scaleValue">1</span>
     </div>
-    <canvas id="pathCanvas"></canvas>
-    <button id="publishButton">Publish Path</button>
-    <button id="clearButton" style="position: absolute; top: 10px; left: 170px;">Clear Path</button>
+    <canvas id="pathCanvas" style=" z-index: 1000;"></canvas>
+    <canvas id="arrowCanvas" style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 3000px; height: 2600px; z-index: 1000; background: transparent; pointer-events: none;"></canvas>
+    <button id="publishButton" style="position: absolute; top: 10px; left: 10px; z-index: 1000;">Publish Path</button>
+    <button id="clearButton" style="position: absolute; top: 10px; left: 170px; z-index: 1000;">Clear Path</button>
 
-    <script src="https://cdn.jsdelivr.net/npm/roslib@1.3.0/build/roslib.min.js"></script>
+
+    <script src="./js/three.min.js"></script>
+    <script src="./js/ColladaLoader.js"></script>
+    <script src="./js/eventemitter2.min.js"></script>
+    <script src="./js/roslib.min.js"></script>
+    <script src="./js/ros3d.min.js"></script>
+    
     <script>
         // Initialize canvas and context
         const canvas = document.getElementById('pathCanvas');
@@ -66,6 +73,11 @@
         const scaleValue = document.getElementById('scaleValue');
         const robotNameInput = document.getElementById('robotNameInput');
         const pathTopicNameInput = document.getElementById('pathTopicNameInput');
+
+        let gridSize; // Variable to store global grid sizeSize
+        let centerX; 
+        let centerY; 
+        let scale; 
 
         // Update scale value display when slider changes
         gridScale.addEventListener('input', () => {
@@ -79,41 +91,41 @@
         // Draw grid lines and axes
         // Draw grid lines and coordinate axes on the canvas
         function drawGrid() {
-                ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas before redrawing
+            ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas before redrawing
             ctx.strokeStyle = '#909090';
             ctx.lineWidth = 1;
-            const gridSize = 40; // Align with coordinate system axes
+            // Calculate grid size based on screen dimensions and desired 10x10 grid
+            gridSize = Math.min(canvas.width, canvas.height) / 10;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
 
-            // Vertical lines
-            for (let x = 0; x <= canvas.width; x += gridSize) {
+            // Draw vertical lines (aligned to center)
+            for (let x = centerX % gridSize; x <= canvas.width; x += gridSize) {
                 ctx.beginPath();
                 ctx.moveTo(x, 0);
                 ctx.lineTo(x, canvas.height);
                 ctx.stroke();
             }
 
-            // Horizontal lines
-            for (let y = 0; y <= canvas.height; y += gridSize) {
+            // Draw horizontal lines (aligned to center)
+            for (let y = centerY % gridSize; y <= canvas.height; y += gridSize) {
                 ctx.beginPath();
                 ctx.moveTo(0, y);
                 ctx.lineTo(canvas.width, y);
                 ctx.stroke();
             }
 
-            // Draw axes (X and Y)
-            const centerX = canvas.width / 2;
-            const centerY = canvas.height / 2;
-
+            // Draw axes (X and Y, aligned with grid lines)
             ctx.strokeStyle = '#000000';
             ctx.lineWidth = 2;
 
-            // X-axis
+            // X-axis (center horizontal line)
             ctx.beginPath();
             ctx.moveTo(0, centerY);
             ctx.lineTo(canvas.width, centerY);
             ctx.stroke();
 
-            // Y-axis
+            // Y-axis (center vertical line)
             ctx.beginPath();
             ctx.moveTo(centerX, 0);
             ctx.lineTo(centerX, canvas.height);
@@ -141,6 +153,59 @@
             ros: ros,
             name: `/path`,
             messageType: 'nav_msgs/Path'
+        });
+
+        let tfClient = new ROSLIB.TFClient({
+            ros : ros,
+            fixedFrame : 'world',
+            angularThres : 0.01,
+            transThres : 0.01,
+            rate : 100.0
+        });
+        
+        // Initialize arrow canvas
+        const arrowCanvas = document.getElementById('arrowCanvas');
+        const arrowCtx = arrowCanvas.getContext('2d');
+        arrowCanvas.width = window.innerWidth;
+        arrowCanvas.height = window.innerHeight;
+
+        // Function to draw arrow based on tf data
+
+        function drawArrow(tf) {
+            arrowCtx.clearRect(0, 0, arrowCanvas.width, arrowCanvas.height);
+            
+            // Extract position and orientation from tf
+            const x = tf.translation.x * gridSize / 1.2 ;
+            const y = tf.translation.y * gridSize / 2;
+            console.log(x, y);
+            const angle = -Math.atan2(2 * tf.rotation.z * tf.rotation.w, 1 - 2 * tf.rotation.z * tf.rotation.z);
+            
+            // Scale and center the position (adjust as needed)
+            const centerX = arrowCanvas.width / 2;
+            const centerY = arrowCanvas.height / 2;
+            const scale = parseFloat(document.getElementById('gridScale').value);
+            const canvasX = centerX + (x / scale);
+            const canvasY = centerY - (y / scale);
+            
+            // Draw arrow
+            arrowCtx.save();
+            arrowCtx.translate(canvasX, canvasY);
+            arrowCtx.rotate(angle);
+            
+            arrowCtx.beginPath();
+            arrowCtx.moveTo(10, 0);
+            arrowCtx.lineTo(-10, -7);
+            arrowCtx.lineTo(-10, 7);
+            arrowCtx.closePath();
+            
+            arrowCtx.fillStyle = 'red';
+            arrowCtx.fill();
+            arrowCtx.restore();
+        }
+
+        tfClient.subscribe('tbmn_01/base_link', function(tf) {
+            console.log(tf);
+            drawArrow(tf);
         });
 
         ros.on('connection', () => {
@@ -176,6 +241,16 @@
                     ros: ros,
                     name: `/${robotName}${pathTopicName}`,
                     messageType: 'nav_msgs/Path'
+                });
+
+                // TF client
+
+                tfClient = new ROSLIB.TFClient({
+                    ros : ros,
+                    fixedFrame : 'world',
+                    angularThres : 0.01,
+                    transThres : 0.01,
+                    rate : 100.0
                 });
             }
         }
@@ -230,16 +305,18 @@
 
             const header = new ROSLIB.Message({
                 stamp: { secs: 0, nsecs: 0 },
-                frame_id: `${robotName}/map`
+                frame_id: `world`
+                // frame_id: `${robotName}/map`
             });
 
             const centerX = canvas.width / 2;
             const centerY = canvas.height / 2;
+            // const gridSize = Math.min(canvas.width, canvas.height) / 10;
             const poses = pathPoints.map(point => {
                 return {
                     header: header,
                     pose: {
-                        position: { x: (point.x - centerX) * scale, y: (centerY - point.y) * scale, z: 0 },
+                        position: { x: (point.x - centerX) / gridSize * scale, y: (centerY - point.y) / gridSize * scale, z: 0 },
                         orientation: { x: 0, y: 0, z: 0, w: 1 }
                     }
                 };
