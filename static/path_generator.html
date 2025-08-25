@@ -175,8 +175,10 @@
             arrowCtx.clearRect(0, 0, arrowCanvas.width, arrowCanvas.height);
             
             // Extract position and orientation from tf
-            const x = tf.translation.x * gridSize / 1.2 ;
-            const y = tf.translation.y * gridSize / 2;
+            // const x = tf.translation.x * gridSize / 1.7;
+            // const y = tf.translation.y * gridSize / 2.89;
+            const x = tf.translation.x * gridSize / 9 * 5.29;
+            const y = tf.translation.y * gridSize / 16 * 5.29;
             console.log(x, y);
             const angle = -Math.atan2(2 * tf.rotation.z * tf.rotation.w, 1 - 2 * tf.rotation.z * tf.rotation.z);
             
@@ -203,7 +205,7 @@
             arrowCtx.restore();
         }
 
-        tfClient.subscribe('tbmn_01/base_link', function(tf) {
+        let tf_sub = tfClient.subscribe('base_link', function(tf) {
             console.log(tf);
             drawArrow(tf);
         });
@@ -251,6 +253,11 @@
                     angularThres : 0.01,
                     transThres : 0.01,
                     rate : 100.0
+                });
+
+                tf_sub = tfClient.subscribe(`${robotName}/base_link`, function(tf) {
+                    console.log(tf);
+                    drawArrow(tf);
                 });
             }
         }
